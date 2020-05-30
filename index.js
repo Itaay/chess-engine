@@ -3,10 +3,6 @@ class Figure {
     constructor(side, type, location) {
       this.side = side;     // side is an object of type {direction:1/-1, name:"white"/"black"}
       this.type = type;     // type of figure
-      this.location = location; // the location on the board {y:ycoord, x:xcoord}
-      this.hasMoved = false;    // a boolean whether the figure had moved yet
-      this.previousLocation = null;
-      
     }
 
     getPossibleMoves(){
@@ -34,112 +30,283 @@ class FigureType{
     }
 }
 
+
+class State{
+    constructor(previous, board, history){
+        this.previous = previous;   // a link to the previous state
+        this.board = board; // a matrix of pieces representing the current state of the board
+        this.history = history; // an array of moves from the beggining of the game: [{from:{y:1,x:0}, to:{y:3, x:0}}, {from:{y:6,x:7}, to:{y:4, x:7}}]
+    }
+
+    getPossibleMovesAt(location, ignoreCheck=false){   // get all the possible moves for the piece in the given tile location.
+        var piece = this.board[location.y][location.x];
+        if(piece == null){
+            return new Array();
+        }
+
+        // get all possible moves for the piece in the given location
+        var possibleMoves = piece.type.movementRules(this, location);
+        
+        var nextState;
+        var checkedLocation;
+        if(!ignoreCheck){
+            // filter out all of the moves that make the moving side come into check(because that's a mate next move).
+            var actuallyPossibleMoves = new Array();
+            for(var i=0;i<possibleMoves.length;i++){    // for each possible move
+                nextState = this.getNextState(location, possibleMoves[i]);  // get the next board state
+                checkedLocation = nextState.getKingOfSide(piece.side);  // then, get the location of this side's king
+                if(!nextState.isThreatened(checkedLocation, piece.side)){   // check if the king is threatened in this state
+                    actuallyPossibleMoves.push(possibleMoves[i]);   // if it's safe, the move is valid (if it's not, the move isn't valid).
+                }
+            }
+        return actuallyPossibleMoves;
+
+        }
+        return possibleMoves;        
+    }
+
+    getNextState(startPos, endPos){
+        // get the state created by moving a piece from startPos to endPos
+        var nextState = new State(this, this.copyBoard(), this.history);
+        nextState.makeAMoveOnBoard(nextState.board, startPos, endPos);
+        return nextState;
+    }
+
+    copyBoard(){    // copy this board's current state and return the copy (detatch the reference)
+        var copy = new Array();
+        for(var y=0;y<this.board.length;y++){
+            copy.push(new Array());
+            for(var x=0;x<this.board[y].length;x++){
+                copy[y].push(this.board[y][x]);
+            }
+        }
+        return copy;
+    }
+
+    makeAMoveOnBoard(board, startPos, endPos){
+        // change the given instance of a board to it's state after moving the piece in the start position to the end position.
+
+        // usually, just move the piece from start pos to end pos.
+
+        // but if a castle move, you need to also handle the rook
+        if(isCastleMove(board, startPos, endPos)){
+            // get location of the corresponding rook
+            var rookLocation = {y:startPos.y, x:0}; // default at queen side castle
+            if(endPos.x >= 4){  // if to the right side
+                rookLocation.x = boardWidth-1;    // then it's king side castle
+            }
+            // and move it to it's designated spot
+            board[rookLocation.y][Math.floor((startPos.x+endPos.x)/2)] = board[rookLocation.y][rookLocation.x];
+            board[rookLocation.y][rookLocation.x] = null;
+        }
+        // or if it's an en passant, you need to take care of the attacked pawn.
+        else if(isEnPassant(board, startPos, endPos)){
+            // find the attacked pawn
+            // remove it
+            board[startPos.y][endPos.x] = null;
+        }
+        board[endPos.y][endPos.x] = board[startPos.y][startPos.x];
+        board[startPos.y][startPos.x] = null;
+        this.history.push({from:startPos, to:endPos});
+    }
+
+    isThreatened(location, side){   // this function checks whether a given square is threatened by a enemy piece 
+        var piece = this.board[location.y][location.x];
+        var exploredPiece;
+        // go over every tile on the board
+        for(var y = 0; y < this.board.length;y++){
+            for(var x= 0;x<this.board[y].length;x++){
+
+                // if the tile contains an enemy piece
+                // get all of it's possible moves and check if it can reach the queried tile.
+                exploredPiece = this.board[y][x];
+                if(exploredPiece != null){  // if not empty tile
+                    if(exploredPiece.side != side){ // if an enemy piece in the tile
+                        // you can ignore checks because they don't matter from a threat point of view(because they come only in next stage)
+                        var possibleMoves = this.getPossibleMovesAt({y:y,x:x}, true);
+                        if(possibleMoves.includes(location)){
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    getKingOfSide(side){
+        var piece;
+        for(var y=0;y<this.board.length;y++){
+            for(var x=0;x<this.board[y].length;x++){
+                piece = this.board[y][x];
+                if(piece != null){
+                    if(piece.type.name == "king" && piece.side == side){
+                        return {y:y, x:x}
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    getSoldierAt(location){
+        return this.board[location.y][location.x];
+    }
+}
+
+  function isCastleMove(board, start, end){
+      // check whether a given move on a board is a castling move:
+      // characterised by a king moving more than one square horizontally
+      var piece = board[start.y][start.x];
+      if(piece == null){
+          return false;
+      }
+      return piece.type.name == "king" && Math.abs(end.x-start.x) > 1;
+          
+  }
+
+  function isEnPassant(board, start, end){
+      // Assuming the movement from position start to position end is a valid move(that had already been checked to be legal).
+      // return whether it's an en passant:
+      // a pawn moving diagonally to an empty square can only happen with an en passant so that's a way to recognize it.
+      var piece = board[start.y][start.x];
+      if(piece == null){
+          return false;
+      }
+      if(piece.type.name != "pawn"){
+          return false;
+      }
+      if(end.x != start.x){    // if diagonal
+        if(board[end.y][end.x] == null){    // and going to an empty spot
+            return true;    // then it means it has to be an en passant
+        }
+      }
+      return false;
+    }
   
 
 
-  function validLocation(location){ // return whether a location is a valid location on the board
+  function validLocation(board, location){ // return whether a location is a valid location on the board
       return location.y < board.length && location.y >= 0 && location.x < board[0].length && location.x >= 0;
   }
 
   
 
-  function getKnightMoves(knight){
+  function getKnightMoves(state, location){
+        var board = state.board;
         // Get an array of all the possible places the knight can go to
         // location is an object of type {y:yloc, x:xloc}
         var moves = [{y:-1, x:-2}, {y:-2, x:-1}, {y:-2, x:1}, {y:-1, x:2}, {y:1, x:2}, {y:2, x:1}, {y:2, x:-1}, {y:1, x:-2}]; 
-        return getMovesInDirections(knight, moves, 1);        
+        var possibleMoves = getMovesInDirections(board, location, moves, 1);
+        return possibleMoves;
   }
 
-  function getBishopMoves(bishop){
-      return getDiagonalMoves(bishop);
+  function getBishopMoves(state, location){
+    var board = state.board;
+    return getDiagonalMoves(board, location);
   }
 
-  function getRookMoves(rook){
-      return getStraightMoves(rook);
+  function getRookMoves(state, location){
+    var board = state.board;
+    return getStraightMoves(board, location);
   }
 
-  function getQueenMoves(queen){
-      return getDiagonalMoves(queen).concat(getStraightMoves(queen));
+  function getQueenMoves(state, location){
+      var board = state.board;
+      return getDiagonalMoves(board, location).concat(getStraightMoves(board, location));
   }
 
-  function getKingMoves(king){
-      var normalMoves = getDiagonalMoves(king, distance=1).concat(getStraightMoves(king, distance=1));
+  function getKingMoves(state, location){
+      var board = state.board;
+      var normalMoves = getDiagonalMoves(board, location, distance=1).concat(getStraightMoves(board, location, distance=1));
       // get castling moves
       // remove blocked locations
       return normalMoves;
   }
 
-  function getPawnMoves(pawn){
-      // a pawn has four types of moves it can do:
-      var possibleMoves = new Array();
-      distance = 1; // if only normal move possible
-      if(!pawn.hasMoved){   // if hasn't moved yet, then 
-            distance = 2;
+  function getPawnMoves(state, location){
+    var board = state.board;
+    var pawn = state.getSoldierAt(location);
+    // a pawn has four types of moves it can do:
+    var possibleMoves = new Array();
+    var distance = 1; // if only normal move possible
+    if((pawn.side.direction == 1 && location.y == 1) || (pawn.side.direction == -1 && location.y == board.length-2)){   // if in starting possition
+         distance = 2;
         }
-      possibleMoves = possibleMoves.concat(getMovesInDirection(pawn, {y:pawn.side.direction, x:0}, distance));
+    
+    if(pawn == null){
+        return possibleMoves;
+    }
+    var direction = {y:pawn.side.direction, x:0};
+    possibleMoves = possibleMoves.concat(getMovesInDirection(board, location, direction, distance, false));
 
-      // diagonal forward: 1 forward and 1 to one of the sides, only if there is an enemy there
-      var diagonals = [{y:pawn.side.direction, x:1}, {y:pawn.side.direction, x:-1}];
-      for(var i=0;i<diagonals.length;i++){
-        var diagonal = diagonals[i];
+    // diagonal forward: 1 forward and 1 to one of the sides, only if there is an enemy there
+    var diagonals = [{y:pawn.side.direction, x:1}, {y:pawn.side.direction, x:-1}];
+    for(var i=0;i<diagonals.length;i++){
+      var diagonal = diagonals[i];
         
-        var toSide = {y:pawn.location.y, x:pawn.location.x + diagonal.x};
-        var target = {y:pawn.location.y + diagonal.y, x:pawn.location.x+diagonal.x};
+       var toSide = {y:location.y, x:location.x + diagonal.x};
+      var target = {y:location.y + diagonal.y, x:location.x+diagonal.x};
 
-        if(validLocation(target)){
-            var lookAhead = board[target.y][target.x];  
-            var lookAside = board[toSide.y][toSide.x];
-            
-            if(lookAhead != null){
-                if(lookAhead.side != pawn.side){
-                    possibleMoves.push(target);
-                }
+      if(validLocation(board, target)){
+          var lookAhead = board[target.y][target.x];  
+          var lookAside = board[toSide.y][toSide.x];
+          
+        if(lookAhead != null){
+            if(lookAhead.side != pawn.side){
+                possibleMoves.push(target);
             }
-            // else, if to the side, there is an ENEMY PAWN that it's previous move was a double move (Cour the la something)
-            else if(lookAside != null){
-                if(lookAside.type.name==pawn.type.name && lookAside.side != pawn.side && lookAside.previousLocation == {y:target.y+pawn.side.direction,x:target.x}){
+        }
+            // else, if to the side, there is an ENEMY PAWN that it's previous move was a double move (en passant)
+        else if(lookAside != null){
+            // look if the previous move was to move a PAWN a double move to the lookaside
+            if(lookAside.side != pawn.side){    // if enemies
+                var lastMove = state.history[state.history.length-1];
+                if(lastMove.to == toSide && Math.abs(lastMove.from.y-lastMove.to.y) > 1){   // and the last move played was a double move by the looked aside enemy pawn
                     possibleMoves.push(target);
                 }
             }
         }
-      }
-      return possibleMoves; 
+    }
+  }
+  return possibleMoves;
 
   }
 
 
 
 
-  function getDiagonalMoves(soldier, distance=board.length){
+  function getDiagonalMoves(board, location, distance=board.length){
       // get an array of all diagonal moves possible
       var moves = [{y:-1,x:-1},{y:-1,x:1},{y:1,x:-1},{y:1,x:1}];
-      return getMovesInDirections(soldier, moves, distance);
+      return getMovesInDirections(board, location, moves, distance);
   }
 
-  function getStraightMoves(soldier, distance=board.length){
+  function getStraightMoves(board, location, distance=board.length){
     // get an array of all straight moves possible
     var moves = [{y:0, x:-1}, {y:0, x:1}, {y:-1, x:0}, {y:1,x:0}];
-    return getMovesInDirections(soldier, moves, distance);
+    return getMovesInDirections(board, location, moves, distance);
   }
 
-  function getMovesInDirection(figure, direction, distance){
+  function getMovesInDirection(board, location, direction, distance, canEat=true){
       // Get all possible moves of a given figure, in a given direction, for a maximum distance
       // distance is how many steps of the direction could be taken
       var locations = new Array();
       var canContinue = true;
       var i = 0;
+      var figure = getSoldierAt(board, location);
       while(i<distance && canContinue){
-          var currentMove = {y:figure.location.y+(direction.y*(i+1)), x:figure.location.x+(direction.x*(i+1))};
+          var currentMove = {y:location.y+(direction.y*(i+1)), x:location.x+(direction.x*(i+1))};
           var valid = false;
           canContinue = false;    // assume cannot continue, but if an empty spot, you can continue
-          if(validLocation(currentMove)){
+          if(validLocation(board, currentMove)){
             var previous = board[currentMove.y][currentMove.x]
             
             if(previous == null){ // if empty, it's a valid spot
                 valid = true;      
                 canContinue = true;
             }
-            else if(previous.side != figure.side){ // if enemy, it's a valid spot
+            else if(previous.side != figure.side && canEat){ // if enemy and can kill enemies in this direction, it's a valid spot
                 valid = true;
             }
           }
@@ -152,13 +319,17 @@ class FigureType{
       return locations;
   }
 
-  function getMovesInDirections(figure, directions, distance){
+  function getMovesInDirections(board, location, directions, distance){
       var locations = new Array();
       for(var i = 0;i<directions.length;i++){
-          locations = locations.concat(getMovesInDirection(figure, directions[i], distance));
+          locations = locations.concat(getMovesInDirection(board, location, directions[i], distance));
       }
       return locations;
   }
+
+function getSoldierAt(board, location){
+    return board[location.y][location.x];
+}
 
 function drawBoard(table){
     var canvasDimensions = {y:canvas.height, x: canvas.width};
@@ -225,7 +396,8 @@ function setupBoard(){
     placePiece(table, sides.black, figureTypes.black.queen, {y:7, x:3});
     placePiece(table, sides.black, figureTypes.black.king, {y:7, x:4});
     
-    return table;
+    var state = new State(null, table, new Array());
+    return state;
 }
 
 function placePiece(board, side, type, location){
@@ -256,15 +428,16 @@ function getSelectedTile(e){
 
 function pressOnBoard(e) {
     var tile = getSelectedTile(e);
-    tile.y = boardHeight-1-tile.y;
+    fixYPos(tile);
 
-    var selectedFigure = board[tile.y][tile.x];
-    if(selectedFigure != null){
-        possibleMoves = selectedFigure.getPossibleMoves();
-    }
-    drawBoard(board);
+    possibleMoves = game.getPossibleMovesAt(tile);
+    drawBoard(game.board);
 }
 
+
+function fixYPos(location){ // fix the y position of a location on the board (used for flipping the board correctly and universally)
+    location.y = boardHeight - 1 - location.y;
+}
 
 var backgroundImage = loadImage("assets/board.png");
 
@@ -294,17 +467,15 @@ var boardHeight = 8;
 
 var canvas = document.getElementById("board");
 var ctx = canvas.getContext("2d");
-var board;
+var game;
 var possibleMoves = new Array();
 
 
 canvas.addEventListener('mousedown', function(e) {
     pressOnBoard(e);
-})
+});
 
 window.onload = function(e){
-    board = setupBoard();
-    drawBoard(board);
+    game = setupBoard();
+    drawBoard(game.board);
 };
-
-  
