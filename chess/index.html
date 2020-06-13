@@ -1,0 +1,39 @@
+<html>
+<head>
+<title>Chess</title>
+<link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+	<div class="board-container">
+		<img class="indicator" id="indicator1">
+		<canvas id="board" class="board" width="800" height="800"></canvas>
+		<img class="indicator" id="indicator2">
+	</div>
+	<div class="control-panel">
+	<button id="undo" onclick="undo()">Undo</button>
+	<button id="flipper" onclick="toggleFlipMode()">Flip</button>
+	<button id="reset" onclick="startGame()">Reset</button>
+	<button id="bot" onclick="toggleBot()">Toggle Bot</button>
+	</div>
+	<script src="minmaxer.js"></script>
+	<script src= "index.js"></script>
+</body>
+<div style="display:none">
+	<div style="float:left">
+	<img src="assets/figures/black/pawn.png" id="black-pawn">
+	<img src="assets/figures/black/knight.png" id="black-knight">
+	<img src="assets/figures/black/bishop.png" id="black-bishop">
+	<img src="assets/figures/black/rook.png" id="black-rook">
+	<img src="assets/figures/black/queen.png" id="black-queen">
+	<img src="assets/figures/black/king.png" id="black-king">
+	</div>
+	<div style="float:right">
+	<img src="assets/figures/white/king.png" id="white-king">
+	<img src="assets/figures/white/queen.png" id="white-queen">
+	<img src="assets/figures/white/rook.png" id="white-rook">
+	<img src="assets/figures/white/bishop.png" id="white-bishop">
+	<img src="assets/figures/white/knight.png" id="white-knight">
+	<img src="assets/figures/white/pawn.png" id="white-pawn">
+	</div>
+</div>
+</html>

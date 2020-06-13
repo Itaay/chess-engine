@@ -1,0 +1,34 @@
+body{
+    background-color:#BBB;
+}
+
+.board-container{
+    text-align:center;
+    display: flex;
+    justify-content: center;
+}
+
+.control-panel{
+    width:100%;
+    height:10%;
+    display:flex;
+    justify-content: center;
+    background-color: #383838;
+}
+
+.control-panel button{
+    width:10%;
+    border-radius: 20px;
+    background-color:#282832;
+    border-width: 0;
+    color: white;
+    font-weight: bolder;
+    font-size: 32px;
+    margin: 0 10px;
+}
+
+.indicator{
+    height:fit-content;
+    width: fit-content;
+    margin: auto 40px;
+}
